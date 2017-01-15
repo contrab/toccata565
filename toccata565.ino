@@ -4,6 +4,8 @@
  * (duration), which blocks all other processing while playing. This program achieves 
  * that, and also simultaneously blinks the board LED, to prove that other processing 
  * continues while the music plays.
+ * 
+ * It also alternates between two different melodies, proving the class can do that.
  *
  * The music is the opening bars of Bach's Bwv 565 Toccata in d minor. Why? Why not.
  */
@@ -29,13 +31,21 @@ typedef struct _onenote {
 /**
  * Opening notes to Bach's Bwv565 Toccata in d minor.
  */
-onenote melody[] = {
+onenote bwvMelody[] = {
   {NOTE_A5, 4}, {NOTE_G5, 4}, {NOTE_A5, 4}, {0, 4},
   {NOTE_G5, 12}, {NOTE_F5, 12}, {NOTE_E5, 12}, {NOTE_D5, 12}, {NOTE_CS5, 4}, {NOTE_D5, 4}, {0, 2},
   {NOTE_A4, 4}, {NOTE_G4, 4}, {NOTE_A4, 4}, {0, 4},
   {NOTE_E4, 4}, {NOTE_F4, 4}, {NOTE_CS4, 4}, {NOTE_D4, 4}, {0, 2},
   {NOTE_A3, 4}, {NOTE_G3, 4}, {NOTE_A3, 4}, {0, 4},
   {NOTE_G3, 12}, {NOTE_F3, 12}, {NOTE_E3, 12}, {NOTE_D3, 12}, {NOTE_CS3, 4}, {NOTE_D3, 4}
+};
+
+/**
+ * G major scale.
+ */
+onenote gscale[] = {
+  {NOTE_G2, 4}, {NOTE_A2, 4}, {NOTE_B2, 4}, {NOTE_C3, 4},
+  {NOTE_D3, 4}, {NOTE_E3, 4}, {NOTE_FS3, 4}, {NOTE_G3, 4}
 };
 
 /**
@@ -95,16 +105,16 @@ class Blinkenlights
 
 
 /**
- * Play the opening statements of Bach Bwv565 Toccata in d minor.
+ * Play a melody without blocking anything else from happening.
  */
-class Bwv565
+class MelodyPlayer
 {
   int pin;
+  onenote *melody;
   int songlength;
 
   // State:
   bool quiet;
-  bool playingnow;
   int note;
   int prevMillis;
   int currDuration;
@@ -112,16 +122,18 @@ class Bwv565
   /**
    * Class Constructor.
    * pin: Which pin has the speaker attached.
+   * playmelody: Reference to the array of notes to play.
    */
   public:
-  Bwv565(int speakerPin) {
-    songlength = sizeof(melody) / sizeof(onenote);
+  template <size_t noteCount>
+  MelodyPlayer(int speakerPin, onenote (&playmelody)[noteCount]) {
+    melody = playmelody;
+    songlength = sizeof(playmelody) / sizeof(onenote);
     pin = speakerPin;
     note = 0;
     prevMillis = 0;
     currDuration = 0;
     quiet = true;
-    playingnow = false;
   }
 
   void Play() {
@@ -134,7 +146,6 @@ class Bwv565
     if (melody[note].pitch != 0) {
       tone(pin, melody[note].pitch);
     }
-    playingnow = true;
   }
 
   /**
@@ -161,6 +172,7 @@ class Bwv565
     note = 0;
     prevMillis = 0;
     currDuration = 0;
+    quiet = true;
   }
 
   /**
@@ -169,7 +181,6 @@ class Bwv565
   void Update() {
     // If not currently playing, exit method ASAP.
     if (quiet) {
-// Don't believe this is necessary after all:      noTone(pin);
       return;
     }
 
@@ -187,7 +198,6 @@ class Bwv565
         note = 0;
         prevMillis = 0;
         currDuration = 0;
-        playingnow = false;
       } else {
         // No, play the next note.
         prevMillis = currMillis;
@@ -198,20 +208,22 @@ class Bwv565
         if (melody[note].pitch != 0) {
           tone(pin, melody[note].pitch);
         }
-        playingnow = true;
       }
     }
   }
 };
 
 Blinkenlights blinker(boardled, 50, 450);
-Bwv565 bwv565(speaker);
+MelodyPlayer bwv565(speaker, bwvMelody);
+MelodyPlayer gmscale(speaker, gscale);
+bool playingscale;
 
 /**
  * Run Once.
  */
 void setup() {
   bwv565.Play();
+  playingscale = false;
 }
 
 /**
@@ -219,6 +231,21 @@ void setup() {
  */
 void loop() {
   blinker.Update();
+  if (playingscale)
+  {
+    if (!gmscale.IsPlaying()) {
+      bwv565.FromTheTop();
+      bwv565.Play();
+      playingscale = false;
+    }
+  } else {
+    if (!bwv565.IsPlaying()) {
+      gmscale.FromTheTop();
+      gmscale.Play();    
+      playingscale = true;
+    }
+  }
   bwv565.Update();
+  gmscale.Update();
 }
 
